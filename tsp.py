@@ -7,10 +7,10 @@ from matplotlib import pyplot as plt
 #Note: np.append()'s' potentially 10% slower than normal list append
 
 #Global variables. Still not sure what these should be
-SCENT_MIN = 0.000001
-ALPHA = 0
+SCENT_MIN = 0.1
+ALPHA = 1
 BETA = 1
-EVAP_COEFF = 0.000005
+EVAP_COEFF = 0.01
 
 class Ant(object):
     def __init__(self, node):
@@ -53,7 +53,7 @@ def init_distances(node_list, distances):
             distances[node1.id][node2.id] = dist                    #removed -1's
     np.fill_diagonal(distances, np.nan)
 
-    heuristic = 1/np.sqrt(distances)
+    heuristic = 1/distances
     return (distances, heuristic)
 
 #i think something might be wrong with updating probability
@@ -67,18 +67,28 @@ def update_probability(scent, heuristic):
 
     return probability
 
-def update_scents(ants, scent):
+def update_scents(ants, scent, distance):
 
     num_nodes = len(ants[0].path)
+    path_travelers = {}
 
     for ant in ants:
-        dist = sum(ant.path)
         for i in xrange(num_nodes - 1):
             src = ant.path[i]
             dst = ant.path[i + 1]
-            #this calc done 2x. Room for improvement
-            scent[src][dst] = max((1 - EVAP_COEFF) * scent[src][dst] + 1/dist, SCENT_MIN)
-            scent[dst][src] = max((1 - EVAP_COEFF) * scent[dst][src] + 1/dist, SCENT_MIN)
+            if (src,dst) in path_travelers:
+                path_travelers[(src,dst)] = path_travelers[(src,dst)] + 1
+                path_travelers[(dst,src)] = path_travelers[(dst,src)] + 1
+            else:
+                path_travelers[(src,dst)] = 1
+                path_travelers[(dst,src)] = 1
+            dist = distance[src][dst]
+
+    for key, value in path_travelers.iteritems():
+        src = key[0]
+        dst = key[1]
+        updated_scent  = (1 - EVAP_COEFF) * scent[src][dst] + 100 * value * (1/distance[src][dst])
+        scent[src][dst] = max(updated_scent, SCENT_MIN)
 
     return scent
 
@@ -114,6 +124,8 @@ def update_paths(ants, probability):
         ant_id = ant_id + 1
 
     return ants
+
+
 
 def plot(nodes, path):
     locations = {}
@@ -162,6 +174,7 @@ def main():
     for a in xrange(iterations):
 
         probability = update_probability(scent, heuristic)
+
         ants = update_paths(ants, probability)
 
         #find shortest path from ant paths
@@ -176,7 +189,7 @@ def main():
                 min_dist = dist
                 print "New minimum distance = %f" % dist
 
-        scent = update_scents(ants, scent)
+        scent = update_scents(ants, scent, distance)
 
         #reset ant paths
         for ant in ants:
