@@ -16,6 +16,7 @@ class Ant(object):
     def __init__(self, node):
         self.node = node
         self.path = np.array([node])
+        self.visited = {}
 
 class Node(object):
     def __init__(self, id, x, y):
@@ -43,7 +44,7 @@ def build_graph(filename):
 
     (distance, heuristic) = init_distances(node_list, distance)
 
-    return (node_list, distance, heuristic, scent)
+    return (node_list, distance, heuristic, scent, length)
 
 def init_distances(node_list, distances):
 
@@ -125,13 +126,39 @@ def update_paths(ants, probability):
 
     return ants
 
+def update_greedy_paths(ants, distance):
 
+    for ant in ants:
+        curr_node = ant.path[-1]
+
+
+
+def place_ants_randomly(num_ants, num_cities):
+    ants = np.empty(num_ants, dtype=object)
+    for i in xrange(num_ants):
+        ants[i] = Ant(np.random.random_integers(0, num_cities - 1))
+    return ants
+
+def shortest_path(ants, min_dist, min_path, distance):
+
+    for ant in ants:
+        #print ant.path
+        dist = 0
+        for i in xrange(ant.path.shape[0] - 1):
+            src = ant.path[i]
+            dst = ant.path[i + 1]
+            dist = dist + distance[src][dst]
+        if dist < min_dist:
+            min_path = ant.path
+            min_dist = dist
+            #print min_path
+
+    return (min_dist, min_path)
 
 def plot(nodes, path):
     locations = {}
     for node in nodes:
         locations[node.id] = (node.x, node.y)
-
     x = []
     y = []
     nums = []
@@ -161,39 +188,23 @@ def main():
     iterations = args.iterations
     file_path = args.file
 
-    min_dist = float('inf')
-    (nodes, distance, heuristic, scent) = build_graph(file_path)
-
-    #randomly place ants
-    ants = np.empty(num_ants, dtype=object)
-    for i in xrange(num_ants):
-        ants[i] = Ant(np.random.random_integers(0, distance.shape[0] - 1))
+    (nodes, distance, heuristic, scent, num_cities) = build_graph(file_path)
 
     #main loop
     min_path = []
+    min_dist = float('inf')
     for a in xrange(iterations):
+
+        ants = place_ants_randomly(num_ants, num_cities)
 
         probability = update_probability(scent, heuristic)
 
         ants = update_paths(ants, probability)
 
         #find shortest path from ant paths
-        for ant in ants:
-            dist = 0
-            for i in xrange(ant.path.shape[0] - 1):
-                src = ant.path[i]
-                dst = ant.path[i + 1]
-                dist = dist + distance[src][dst]
-            if dist < min_dist:
-                min_path = ant.path
-                min_dist = dist
-                print "New minimum distance = %f" % dist
+        (min_dist, min_path) = shortest_path(ants, min_dist, min_path, distance)
 
         scent = update_scents(ants, scent, distance)
-
-        #reset ant paths
-        for ant in ants:
-            ant.path = [ant.path[0]]
 
     print "Shortest path found:"
     print min_path
