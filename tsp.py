@@ -3,13 +3,13 @@ import argparse
 import os
 import numpy as np
 from matplotlib import pyplot as plt
+import time
 
-#Note: np.append()'s' potentially 10% slower than normal list append
 
 #Global variables. Still not sure what these should be
 SCENT_MIN = 0.1
 ALPHA = 1
-BETA = 1
+BETA = 2
 EVAP_COEFF = 0.01
 
 class Ant(object):
@@ -57,14 +57,11 @@ def init_distances(node_list, distances):
     heuristic = 1/distances
     return (distances, heuristic)
 
-#i think something might be wrong with updating probability
 def update_probability(scent, heuristic):
 
     probability = ((scent**ALPHA) * (heuristic**BETA)) / \
             np.nansum((scent**ALPHA) * (heuristic**BETA), axis=1)[:,np.newaxis]
 
-    #pure distance probability
-    #probability = (heuristic**BETA) / np.nansum((heuristic**BETA), axis=1)[:,np.newaxis]
 
     return probability
 
@@ -93,20 +90,20 @@ def update_scents(ants, scent, distance):
 
     return scent
 
-def calc_path_length(ant):
 
+def path_distance(path, distance):
     dist = 0
-    for i in xrange(ant.path.shape[0]):
-        src = ant.path[i]
-        dst = ant.path[i + 1]
+    num_cities = len(path)
+    for i in xrange(num_cities - 1):
+        #print "i = %d" % i
+        src = path[i]
+        dst = path[i+1]
         dist = dist + distance[src][dst]
 
     return dist
 
-#I think something is messed up in the inner loop with the offset between nodeID and indexes
 def update_paths(ants, probability):
     num_nodes = probability.shape[0]
-    ant_id = 0
     for ant in ants:
         new_arr = np.copy(probability)
         curr_node = ant.path[-1]
@@ -122,15 +119,12 @@ def update_paths(ants, probability):
             else:
                 ant.path = np.append(ant.path, ant.path[0])
 
-        ant_id = ant_id + 1
-
     return ants
 
 def update_greedy_paths(ants, distance):
 
     for ant in ants:
         curr_node = ant.path[-1]
-
 
 
 def place_ants_randomly(num_ants, num_cities):
@@ -171,7 +165,63 @@ def plot(nodes, path):
     plt.xlabel("X Position")
     plt.ylabel("Y Position")
     plt.title("Shortest path found")
+    plt.hold(True)
     plt.show()
+
+
+def two_opt_swap(route, i, k):
+    route_len = route.shape[0]
+    new_route = np.empty(route_len, dtype=int)
+    new_route[0] = route[0]
+
+    j = 1
+    for a in xrange(1, i):
+        new_route[j] = route[a]
+        j += 1
+
+    """route[i] to route[k] in reverse"""
+    for a in reversed(xrange(i, k+1)):
+    	new_route[j] = route[a]
+        j += 1
+
+    for a in xrange(k+1, route_len):
+        new_route[j] = route[a]        
+        j += 1
+
+    return new_route
+
+def two_opt_iter(curr_path, distance):
+
+    num_nodes = curr_path.shape[0]
+    best_distance = path_distance(curr_path, distance)
+    for i in xrange(1, num_nodes - 1):
+        for k in xrange(i + 1, num_nodes - 1):
+            new_route = two_opt_swap(curr_path, i, k)
+            new_dist = path_distance(new_route, distance)
+            if (new_dist < best_distance):
+            	print new_dist
+            	return (new_route, True)
+
+    return (curr_path, False)
+
+
+def two_opt(curr_path, distance):
+
+    num_nodes = curr_path.shape[0]
+    improvement = True
+    while (improvement):
+    	(curr_path, improvement) = two_opt_iter(curr_path, distance)
+
+    return curr_path
+
+
+def local_search(ants, distance):
+    """Local search on each solution"""
+    for ant in ants:
+        ant.path = two_opt(ant.path, distance)
+
+    return ants
+
 
 def main():
 
@@ -193,6 +243,7 @@ def main():
     #main loop
     min_path = []
     min_dist = float('inf')
+
     for a in xrange(iterations):
 
         ants = place_ants_randomly(num_ants, num_cities)
@@ -201,8 +252,11 @@ def main():
 
         ants = update_paths(ants, probability)
 
-        #find shortest path from ant paths
+        ants = local_search(ants, distance)
+
         (min_dist, min_path) = shortest_path(ants, min_dist, min_path, distance)
+
+        min_dist = path_distance(min_path, distance)
 
         scent = update_scents(ants, scent, distance)
 
